@@ -28,7 +28,9 @@ var (
 	livenessObject     = flag.String("l", "https://speed.cloudflare.com/__down?bytes=%d", "liveness object, support http(s) url, support payload too")
 	configPathConfig   = flag.String("c", "", "configuration file path, also support http(s) url")
 	filterRegexConfig  = flag.String("f", ".*", "filter proxies by name, use regexp")
-	downloadSizeConfig = flag.Int("size", 1024*1024*100, "download size for testing proxies")
+	downloadSizeConfig = flag.Int("size", 1024*1024, "download size for testing proxies")
+	minBandwidthConfig = flag.Float64("minb", 1024*100, "min bandwidth for testing proxies")
+	maxTtfbConfig = flag.Int64("maxt", 1000, "max ttfb (ms) for testing proxies")
 	timeoutConfig      = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
 	sortField          = flag.String("sort", "b", "sort field for testing proxies, b for bandwidth, t for TTFB")
 	output             = flag.String("output", "", "output result to csv/yaml file")
@@ -134,7 +136,9 @@ func main() {
 		}
 		fmt.Printf(format, "", "节点", "带宽", "延迟")
 		for _, result := range results {
-			result.Printf(format)
+                        if result.Bandwidth >= *minBandwidthConfig &&  result.TTFB.Milliseconds() > 0 &&  result.TTFB.Milliseconds() <= *maxTtfbConfig {
+			            result.Printf(format)
+			}
 		}
 	}
 
@@ -337,8 +341,10 @@ func writeNodeConfigurationToYAML(filePath string, results []Result, proxies map
 
 	var sortedProxies []any
 	for _, result := range results {
-		if v, ok := proxies[result.Name]; ok {
-			sortedProxies = append(sortedProxies, v.SecretConfig)
+		if result.Bandwidth >= *minBandwidthConfig &&  result.TTFB.Milliseconds() > 0 &&  result.TTFB.Milliseconds() <= *maxTtfbConfig {
+  		        if v, ok := proxies[result.Name]; ok {
+			        sortedProxies = append(sortedProxies, v.SecretConfig)
+		        }
 		}
 	}
 
@@ -347,6 +353,7 @@ func writeNodeConfigurationToYAML(filePath string, results []Result, proxies map
 		return err
 	}
 
+        _, err = fp.WriteString("proxies:\r\n")
 	_, err = fp.Write(bytes)
 	return err
 }
